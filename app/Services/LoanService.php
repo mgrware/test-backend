@@ -52,8 +52,6 @@ class LoanService
                 $repaymentAmount = ceil($fraction + ($amount / $terms));
             }
 
-
-
             $scheduledRepayment = new ScheduledRepayment(
                 [
                     'amount' => $repaymentAmount,
@@ -81,7 +79,74 @@ class LoanService
      * @return ReceivedRepayment
      */
     public function repayLoan(Loan $loan, int $amount, string $currencyCode, string $receivedAt): ReceivedRepayment
-    {
-        //
+    {   
+        $currentScheduledPayment = $loan->scheduledRepayments()
+            ->whereDate('due_date', '=', $receivedAt)
+            ->first();
+
+        foreach($loan->scheduledRepayments as $scheduledPayment) {
+            if($scheduledPayment->id != $currentScheduledPayment->id) {
+                $scheduledPayment->update([
+                    'status' => ($scheduledPayment->status == '') ? ScheduledRepayment::STATUS_DUE : $scheduledPayment->status,
+                ]);
+            }else{
+                $outStandingAmount = $currentScheduledPayment->outstanding_amount;
+                $status = ScheduledRepayment::STATUS_REPAID;
+
+                if ($amount > $scheduledPayment->amount)
+                {   
+                     $nextId = $loan->scheduledRepayments->where('id' , '>', $currentScheduledPayment->id)->min('id');
+                     
+                     $scheduledPayment->update([
+                        'status' => ScheduledRepayment::STATUS_REPAID,
+                        'outstanding_amount' => $outStandingAmount < 0 ? abs($outStandingAmount) : 0
+                    ]);
+
+                    $nextScheduledPayment = $loan->scheduledRepayments->where('id', $nextId)->first();
+
+                    $nextScheduledPayment->update([
+                        'status' => ScheduledRepayment::STATUS_PARTIAL,
+                        'outstanding_amount' => $amount - $nextScheduledPayment->amount
+                    ]);
+
+                }else{
+                     $scheduledPayment->update([
+                        'status' => ScheduledRepayment::STATUS_REPAID,
+                        'outstanding_amount' => $outStandingAmount < 0 ? abs($outStandingAmount) : 0
+                    ]);                    
+                }
+
+            }
+
+        }
+
+        $receivedRepayment = $loan->receivedRepayments()->create([
+            'amount' => $amount,
+            'currency_code' => $currencyCode,
+            'received_at' => $receivedAt,
+        ]);
+
+        $outStandingAmount = $loan->amount - $amount;
+
+        $countRepaid = $loan->scheduledRepayments()->where('status', ScheduledRepayment::STATUS_REPAID)->count();
+
+        if ($countRepaid == $loan->terms){
+            $loan->update([
+                'outstanding_amount' => 0,
+                'status' => Loan::STATUS_REPAID
+            ]);
+                        
+        }else{
+            $loan->update([
+                'outstanding_amount' => $outStandingAmount,
+                'status' => Loan::STATUS_DUE
+            ]);
+        }
+
+
+
+
+        return $receivedRepayment;
+        
     }
 }

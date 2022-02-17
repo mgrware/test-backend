@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Observers\ScheduledRepaymentObserver;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -42,5 +43,11 @@ class ScheduledRepayment extends Model
     public function loan()
     {
         return $this->belongsTo(Loan::class, 'loan_id');
+    }
+
+    public static function boot()
+    {
+       parent::boot();
+       self::observe(ScheduledRepaymentObserver::class);
     }
 }
