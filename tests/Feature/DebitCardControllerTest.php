@@ -44,6 +44,9 @@ class DebitCardControllerTest extends TestCase
                 'is_active'
             ]
         ]);
+        
+        $this->assertDatabaseHas('debit_cards', ['user_id' => $this->user->id]);
+
     }
 
     public function testCustomerCannotSeeAListOfDebitCardsOfOtherCustomers()
@@ -63,7 +66,16 @@ class DebitCardControllerTest extends TestCase
 
     public function testCustomerCanCreateADebitCard()
     {
-        // post /debit-cards
+        $params = ["type" => ""];
+        $response = $this->post('/api/debit-cards', $params);
+        $response->assertStatus(HttpResponse::HTTP_FOUND);
+        $this->assertDatabaseMissing('debit_cards', ['type' => 'test123']);
+
+        $params = ["type" => "test123"];
+        $response = $this->post('/api/debit-cards', $params);
+        $response->assertStatus(HttpResponse::HTTP_CREATED);
+        $this->assertDatabaseHas('debit_cards', ['type' => 'test123']);
+
     }
 
     public function testCustomerCanSeeASingleDebitCardDetails()
